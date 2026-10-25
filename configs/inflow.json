@@ -1,7 +1,16 @@
+
 {
   "schema_version": 1,
   "task": "inflow",
   "seed": 67,
   "split_version": "random_v1",
-  "model": {"kind": "hist_gradient_boosting", "params": {"max_iter": 80, "learning_rate": 0.08, "max_leaf_nodes": 15}}
+  "model": {
+    "kind": "catboost",
+    "params": {
+      "iterations": 1000,
+      "depth": 6,
+      "loss_function": "RMSE",
+      "verbose": false
+    }
+  }
 }
