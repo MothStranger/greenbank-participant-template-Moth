@@ -67,7 +67,7 @@ def make_inflow_model(cfg: dict[str, Any]):
     if kind == "catboost":
         allowed = {
             "iterations", "depth", "loss_function", "verbose",
-            "l2_leaf_reg", "random_strength", "random_seed",
+            "l2_leaf_reg", "random_strength",
             "thread_count", "allow_writing_files"
         }
         unknown = set(params) - allowed
