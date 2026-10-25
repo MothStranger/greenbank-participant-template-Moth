@@ -15,6 +15,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from catboost import CatBoostRegressor
 
 from .data import CLIENT_FEATURES
 
@@ -56,17 +57,35 @@ def read_config(path: str | Path) -> dict[str, Any]:
     return cfg
 
 
-def make_inflow_model(cfg: dict[str, Any]) -> Pipeline:
+
+def make_inflow_model(cfg: dict[str, Any]):
     model_spec = cfg.get("model", {})
     params = dict(model_spec.get("params", {}))
     seed = int(cfg.get("seed", 0))
     kind = model_spec.get("kind", "hist_gradient_boosting")
-    if kind == "hist_gradient_boosting":
+
+    if kind == "catboost":
+        allowed = {
+            "iterations", "depth", "loss_function", "verbose",
+            "l2_leaf_reg", "random_strength", "random_seed",
+            "thread_count", "allow_writing_files"
+        }
+        unknown = set(params) - allowed
+        if unknown:
+            raise ValueError(f"unsupported inflow params: {sorted(unknown)}")
+        params.setdefault("verbose", False)
+        params.setdefault("allow_writing_files", False)
+        params.setdefault("loss_function", "RMSE")
+        estimator = CatBoostRegressor(random_seed=seed, **params)
+        return estimator
+
+    elif kind == "hist_gradient_boosting":
         allowed = {"max_iter", "learning_rate", "max_leaf_nodes", "l2_regularization", "min_samples_leaf"}
         unknown = set(params) - allowed
         if unknown:
             raise ValueError(f"unsupported inflow params: {sorted(unknown)}")
         estimator = HistGradientBoostingRegressor(random_state=seed, **params)
+        
     elif kind == "ridge":
         allowed = {"alpha"}
         unknown = set(params) - allowed
@@ -99,7 +118,10 @@ def train_inflow(config_path: str, data_dir: str, output_dir: str) -> None:
     if not train["client_id"].is_unique:
         raise ValueError("clients_train.csv has duplicate client_id")
     model = make_inflow_model(cfg)
-    model.fit(train[FEATURE_COLUMNS], train["inflow_next_30d"])
+    if cfg.get("model", {}).get("kind") == "catboost":
+        model.fit(train[FEATURE_COLUMNS], train["inflow_next_30d"], cat_features=CATEGORICAL)
+    else:
+        model.fit(train[FEATURE_COLUMNS], train["inflow_next_30d"])
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     joblib.dump({"model": model, "feature_columns": FEATURE_COLUMNS, "config": cfg}, out / "inflow_model.joblib")
